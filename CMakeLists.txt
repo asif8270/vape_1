@@ -13,7 +13,6 @@ set(COMPONENTS
     twi
     mpu9250
     lis2dh12
-    lis2dh12_reg
 )
 
 foreach(COMPONENT ${COMPONENTS})

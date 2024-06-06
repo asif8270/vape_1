@@ -57,16 +57,44 @@
 #define LIS2DH12_ACT_THS          0x3E
 #define LIS2DH12_ACT_DUR          0x3F
 
+/**
+ * @brief Structure for acceleration data
+ * 
+ */
+typedef struct {
+    int16_t x;
+    int16_t y;
+    int16_t z;
+} lis2dh12_accel_data_t;
 
 /**
- * @brief  LIS2DH12 initialization function
+ * @brief This function checks the device we are talking to
+ * 
+ * @return int 
+ */
+int lis2dh12_check_who_am_i(void);
+
+/**
+ * @brief Checks whether the device is connected or not
+ * 
+ * @return true 
+ * @return false 
+ */
+bool lis2dh12_is_connected(void);
+
+/**
+ * @brief This funciton initialize the LIS2DH12
  * 
  * @return int 
  */
 int lis2dh12_init(void);
 
-// int lis2dh12_read_accel(accel_values_t *accel_values);
-int lis2dh12_enable_fifo(void);
-int lis2dh12_read_accel(int16_t *accel_x, int16_t *accel_y, int16_t *accel_z);
+/**
+ * @brief Function to read Acceleration data
+ * 
+ * @param data 
+ * @return int 
+ */
+int lis2dh12_read_accel(lis2dh12_accel_data_t* data);
 
 #endif //LIS2DH12_H_

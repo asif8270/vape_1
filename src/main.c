@@ -1,5 +1,6 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
+#include <zephyr/logging/log.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -26,36 +27,37 @@ int main(void)
         return 0;
     }
 
-    err = lis2dh12_init();
-    if (err != 0)
+    if (lis2dh12_is_connected())
     {
-        printk("\rCould not lis2dh12_init\n");
-        return 0;
+        printk("LIS2DH12 is connected and WHO_AM_I matched.\n");
+
+        // Initialize the sensor
+        ret = lis2dh12_init();
+        if (ret != 0)
+        {
+            printk("Failed to initialize LIS2DH12\n");
+            return;
+        }
+
+        // Read accelerometer data
+        lis2dh12_accel_data_t accel_data;
+        while (1)
+        {
+            ret = lis2dh12_read_accel(&accel_data);
+            if (ret == 0)
+            {
+                printk("Accel X: %d, Y: %d, Z: %d\n", accel_data.x, accel_data.y, accel_data.z);
+            }
+            else
+            {
+                printk("Failed to read accelerometer data\n");
+            }
+            k_sleep(K_MSEC(100)); // Sleep for 1 second
+        }
     }
     else
     {
-        printk("\rlis2dh12_init\n");
-    }
-    ret = lis2dh12_enable_fifo();
-    if (ret != 0)
-    {
-        printk("Failed to enable FIFO on LIS2DH12\n");
-        return 0;
-    }
-    while (1)
-    {
-        // Read accelerometer values
-        ret = lis2dh12_read_accel(&accel_x, &accel_y, &accel_z);
-        if (ret == 0)
-        {
-            printk("Accel X: %d, Y: %d, Z: %d\n", accel_x, accel_y, accel_z);
-        }
-        else
-        {
-            printk("Failed to read accelerometer values\n");
-        }
-
-        k_sleep(K_MSEC(500));
+        printk("LIS2DH12 is not connected or WHO_AM_I mismatch.\n");
     }
 
     return 0;

@@ -14,25 +14,24 @@
 #include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
+#include <zephyr/logging/log.h>
 
 #include "lis2dh12.h"
 #include "twi.h"
 
 #define LIS2DH12_WHO_AM_I_VAL 0x33
+LOG_MODULE_REGISTER(lis2dh12, LOG_LEVEL_DBG);
 
-int lis2dh12_check_who_am_i(void)
-{
+int lis2dh12_check_who_am_i(void) {
     uint8_t who_am_i;
     int ret = twi_read(LIS2DH12_I2C_ADDR, LIS2DH12_WHO_AM_I, &who_am_i, 1);
-    if (ret != 0)
-    {
+    if (ret != 0) {
         LOG_ERR("Failed to read WHO_AM_I register: %d", ret);
         return ret;
     }
 
-    if (who_am_i != LIS2DH12_WHO_AM_I_VAL)
-    {
-        LOG_ERR("WHO_AM_I value mismatch: expected 0x%02x, got 0x%02x", LIS2DH12_WHO_AM_I_VAL, who_am_i);
+    if (who_am_i != LIS2DH12_WHO_AM_I_VAL) {
+        LOG_ERR("WHO_AM_I value mismatch: expected 0x%33, got 0x%02x", LIS2DH12_WHO_AM_I_VAL, who_am_i);
         return -EIO;
     }
 
@@ -40,83 +39,68 @@ int lis2dh12_check_who_am_i(void)
     return 0;
 }
 
-int lis2dh12_init()
-{
-    uint8_t ctrl_reg_1 = 0x57U;
-    uint8_t ctrl_reg_4 = 0x00U;
-    int err;
-    err = twi_write(LIS2DH12_I2C_ADDR, LIS2DH12_CTRL_REG1, &ctrl_reg_1, sizeof(ctrl_reg_1));
-    if (err != 0)
-    {
-        printk("\rFailed to twi_write\n");
-        return 0;
+bool lis2dh12_is_connected(void) {
+    uint8_t dummy = 0;
+    int ret = twi_read(LIS2DH12_I2C_ADDR, 0x00, &dummy, 1); // Try to read a byte to check if the device is present
+    if (ret == 0) {
+        // If the device acknowledged, check the WHO_AM_I register
+        ret = lis2dh12_check_who_am_i();
+        if (ret == 0) {
+            return true;
+        }
     }
-
-    err = twi_write(LIS2DH12_I2C_ADDR, LIS2DH12_CTRL_REG4, &ctrl_reg_4, sizeof(ctrl_reg_4));
-    if (err != 0)
-    {
-        printk("\rFailed to twi_write\n");
-        return 0;
-    }
-
-    return 0;
+    return false;
 }
 
-// int lis2dh12_read_accel(accel_values_t *accel_values)
-// {
-//     int err;
-//     uint8_t raw_values_x_h[6];
-//     uint8_t raw_values_x_l[6];
-//     err = twi_read(LIS2DH12_I2C_ADDR, LIS2DH12_OUT_X_L, &raw_values_x_l, sizeof(raw_values_x_l));
-//     if (err != 0)
-//     {
-//         printk("\rCould not read accel_values\n");
-//         return 0;
-//     }
-//     err = twi_read(LIS2DH12_I2C_ADDR, LIS2DH12_OUT_X_H, &raw_values_x_h, sizeof(raw_values_x_h));
-//     if (err != 0)
-//     {
-//         printk("\rCould not read accel_values\n");
-//         return 0;
-//     }
-
-//     return 0;
-// }
-
-int lis2dh12_enable_fifo(void)
-{
-    int ret;
+int lis2dh12_init(void) {
     uint8_t data;
 
-    // Configure FIFO_CTRL_REG: Enable FIFO mode
+    // Set data rate to 100 Hz and enable X, Y, Z axes
+    data = 0x57; // ODR = 100 Hz, LPen = 0, Zen = 1, Yen = 1, Xen = 1
+    int ret = twi_write(LIS2DH12_I2C_ADDR, LIS2DH12_CTRL_REG1, &data, 1);
+    if (ret != 0) {
+        LOG_ERR("Failed to write to CTRL_REG1: %d", ret);
+        return ret;
+    }
+
+    // Set full-scale range to ±2g, high-resolution mode off
+    data = 0x01; // BDU = 0, BLE = 0, FS = ±2g, HR = 0
+    ret = twi_write(LIS2DH12_I2C_ADDR, LIS2DH12_CTRL_REG4, &data, 1);
+    if (ret != 0) {
+        LOG_ERR("Failed to write to CTRL_REG4: %d", ret);
+        return ret;
+    }
+
+    // Enable FIFO mode
     data = 0x80; // FM = FIFO mode
     ret = twi_write(LIS2DH12_I2C_ADDR, LIS2DH12_FIFO_CTRL_REG, &data, 1);
-    if (ret != 0)
+    if (ret != 0) {
+        LOG_ERR("Failed to write to FIFO_CTRL_REG: %d", ret);
         return ret;
+    }
 
-    // Configure CTRL_REG5: Enable FIFO
+    // Enable FIFO in control register 5
     data = 0x40; // FIFO_EN = 1
     ret = twi_write(LIS2DH12_I2C_ADDR, LIS2DH12_CTRL_REG5, &data, 1);
-    if (ret != 0)
+    if (ret != 0) {
+        LOG_ERR("Failed to write to CTRL_REG5: %d", ret);
         return ret;
+    }
 
     return 0;
 }
 
-int lis2dh12_read_accel(int16_t *accel_x, int16_t *accel_y, int16_t *accel_z)
-{
-    uint8_t data[6];
-    int ret;
-
-    // Read OUT_X_L to OUT_Z_H
-    ret = twi_read(LIS2DH12_I2C_ADDR, LIS2DH12_OUT_X_L, data, 6);
-    if (ret != 0)
+int lis2dh12_read_accel(lis2dh12_accel_data_t* data) {
+    uint8_t raw_data[6];
+    int ret = twi_read(LIS2DH12_I2C_ADDR, LIS2DH12_OUT_X_L | 0x80, raw_data, 6); // 0x80 for auto-increment
+    if (ret != 0) {
+        LOG_ERR("Failed to read accelerometer data: %d", ret);
         return ret;
+    }
 
-    // Combine low and high bytes
-    *accel_x = (int16_t)((data[1] << 8) | data[0]);
-    *accel_y = (int16_t)((data[3] << 8) | data[2]);
-    *accel_z = (int16_t)((data[5] << 8) | data[4]);
+    data->x = (int16_t)((raw_data[1] << 8) | raw_data[0]);
+    data->y = (int16_t)((raw_data[3] << 8) | raw_data[2]);
+    data->z = (int16_t)((raw_data[5] << 8) | raw_data[4]);
 
     return 0;
 }
